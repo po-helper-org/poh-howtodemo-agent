@@ -106,6 +106,13 @@ async def finish_labels(repo: str, issue: int, verdict_label: str) -> None:
     if _dry_run:
         return
     gh = ports.github()
+    if not verdict_label:
+        # Прогон сорвался, не дойдя до вердикта. Метку demo:* не ставим:
+        # «агент упал» и «сценарий не пройден» — разные новости, и путать их
+        # значит слать человека чинить продукт вместо агента.
+        gh.remove_labels(repo, issue, [RUN_LABEL])
+        gh.add_label(repo, issue, FAILED_LABEL)
+        return
     stale = [label for label in ALL_VERDICT_LABELS if label != verdict_label]
     gh.remove_labels(repo, issue, [RUN_LABEL, *stale])
     gh.add_label(repo, issue, verdict_label)
