@@ -55,7 +55,7 @@ def to_json(steps: list[Step]) -> str:
     return json.dumps({"steps": [asdict(s) for s in steps]}, ensure_ascii=False, indent=2)
 
 
-def build(scenario: list[str], translate: Callable[[list[str]], str],
+def build(scenario: list[str], translate: Callable[[list[str]], str], issue: int,
           strict: bool = True) -> list[Step]:
     """Собрать план по сценарию.
 
@@ -68,9 +68,15 @@ def build(scenario: list[str], translate: Callable[[list[str]], str],
     законно разворачивается в несколько шагов, и требовать совпадения один к
     одному значило бы отвергать нормальный план. Требование остаётся одно:
     хотя бы один шаг.
+
+    `source` перезаписывается кодом. Модель на живом прогоне написала туда
+    `Issue #1` вместо `#100`, списав номер из примера промпта, — а ссылка на
+    источник требования это часть вердикта, и вердикт модель не пишет.
     """
     steps = from_json(translate(scenario))
     if strict and len(steps) != len(scenario):
         raise PlanError(
             f"в сценарии {len(scenario)} шагов, в плане {len(steps)} — план неполон")
+    for step in steps:
+        step.source = f"Issue #{issue}, шаг {step.n}"
     return steps

@@ -39,7 +39,7 @@ def test_plan_must_cover_every_step():
         return json.dumps({"steps": [{"n": 1, "text": "a", "action": {"kind": "unmapped"}}]})
 
     with pytest.raises(plan.PlanError, match="2"):
-        plan.build(["a", "b"], translate)
+        plan.build(["a", "b"], translate, issue=12)
 
 
 def test_roundtrip_is_stable():
@@ -55,13 +55,14 @@ def test_free_form_scenario_may_expand_into_several_steps():
             {"n": 2, "text": "второй curl", "action": {"kind": "http", "path": "/quote"}},
         ]})
 
-    steps = plan.build(["блок целиком"], translate, strict=False)
+    steps = plan.build(["блок целиком"], translate, issue=12, strict=False)
     assert len(steps) == 2
 
 
 def test_free_form_still_requires_at_least_one_step():
     with pytest.raises(plan.PlanError, match="ни одного шага"):
-        plan.build(["блок целиком"], lambda s: json.dumps({"steps": []}), strict=False)
+        plan.build(["блок целиком"], lambda s: json.dumps({"steps": []}), issue=12,
+                   strict=False)
 
 
 def test_strict_is_the_default():
@@ -69,4 +70,23 @@ def test_strict_is_the_default():
         return json.dumps({"steps": [{"n": 1, "text": "a", "action": {"kind": "unmapped"}}]})
 
     with pytest.raises(plan.PlanError):
-        plan.build(["a", "b"], translate)
+        plan.build(["a", "b"], translate, issue=12)
+
+
+def test_source_is_computed_by_code_not_taken_from_the_model():
+    """Живой прогон: модель написала «Issue #1» на Issue #100."""
+    raw = json.dumps({"steps": [
+        {"n": 1, "text": "шаг", "action": {"kind": "unmapped"},
+         "source": "Issue #1, шаг 1"},
+    ]})
+    steps = plan.build(["шаг"], lambda s: raw, issue=100)
+    assert steps[0].source == "Issue #100, шаг 1"
+
+
+def test_source_follows_the_plan_step_number():
+    raw = json.dumps({"steps": [
+        {"n": 1, "text": "a", "action": {"kind": "unmapped"}},
+        {"n": 2, "text": "b", "action": {"kind": "unmapped"}},
+    ]})
+    steps = plan.build(["блок"], lambda s: raw, issue=7, strict=False)
+    assert [s.source for s in steps] == ["Issue #7, шаг 1", "Issue #7, шаг 2"]
