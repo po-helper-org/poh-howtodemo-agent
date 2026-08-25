@@ -49,3 +49,14 @@ def test_changed_scenario_is_said_out_loud():
     rep = _report()
     rep.scenario_changed = True
     assert "менялся после фиксации" in render.report_md(rep)
+
+
+def test_free_form_scenario_is_flagged_for_the_reader():
+    rep = _report()
+    rep.anchor.numbered = False
+    body = render.report_md(rep)
+    assert "свободной формой" in body and "Сверьте" in body
+
+
+def test_numbered_scenario_says_nothing_extra():
+    assert "свободной формой" not in render.report_md(_report())

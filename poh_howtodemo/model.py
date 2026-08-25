@@ -51,6 +51,10 @@ class Anchor:
     comment_id: int = 0
     sha256: str = ""
     taken_at: str = ""
+    # Сценарий был нумерованным списком. Свободная форма (блок `curl` с
+    # «Ожидаемо:», как пишут люди) разбирается иначе и не требует
+    # пошагового совпадения с планом — см. plan.build(strict=...).
+    numbered: bool = True
 
 
 @dataclass

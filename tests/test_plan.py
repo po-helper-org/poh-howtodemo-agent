@@ -45,3 +45,28 @@ def test_plan_must_cover_every_step():
 def test_roundtrip_is_stable():
     steps = plan.from_json(RAW)
     assert plan.from_json(plan.to_json(steps)) == steps
+
+
+def test_free_form_scenario_may_expand_into_several_steps():
+    """Блок curl с двумя запросами — законно два шага из одного элемента."""
+    def translate(_scenario):
+        return json.dumps({"steps": [
+            {"n": 1, "text": "первый curl", "action": {"kind": "http", "path": "/quote"}},
+            {"n": 2, "text": "второй curl", "action": {"kind": "http", "path": "/quote"}},
+        ]})
+
+    steps = plan.build(["блок целиком"], translate, strict=False)
+    assert len(steps) == 2
+
+
+def test_free_form_still_requires_at_least_one_step():
+    with pytest.raises(plan.PlanError, match="ни одного шага"):
+        plan.build(["блок целиком"], lambda s: json.dumps({"steps": []}), strict=False)
+
+
+def test_strict_is_the_default():
+    def translate(_scenario):
+        return json.dumps({"steps": [{"n": 1, "text": "a", "action": {"kind": "unmapped"}}]})
+
+    with pytest.raises(plan.PlanError):
+        plan.build(["a", "b"], translate)

@@ -71,7 +71,7 @@ def verify(repo: str, issue: int, pr_number: int, base_url: str, root: str,
     a, scenario = fixed
     _, changed = anchor.reread(a, body, comments)
 
-    steps = plan.build(scenario, translate)
+    steps = plan.build(scenario, translate, strict=a.numbered)
 
     container = ""
     try:
