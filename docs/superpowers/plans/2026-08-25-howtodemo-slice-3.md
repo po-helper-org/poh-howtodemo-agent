@@ -156,7 +156,7 @@ def _observe(step: Step, base_url: str, workdir: str, root: str, send,
 - [ ] **Step 4: Запустить тесты, убедиться, что проходят**
 
 Run: `.venv/bin/pytest tests/test_env.py tests/test_run_with_stand.py -q`
-Expected: PASS, 15 passed
+Expected: PASS, 18 passed
 
 - [ ] **Step 5: Коммит**
 
@@ -251,7 +251,7 @@ def build(scenario: list[str], translate: Callable[[list[str]], str], issue: int
 - [ ] **Step 4: Запустить тесты, убедиться, что проходят**
 
 Run: `.venv/bin/pytest tests/test_plan.py tests/test_run.py tests/test_run_with_stand.py -q`
-Expected: PASS, 19 passed
+Expected: PASS, 20 passed
 
 - [ ] **Step 5: Коммит**
 
@@ -431,7 +431,7 @@ def resolve_pull(gh, repo: str, issue: int, pr_number: int) -> int:
 - [ ] **Step 4: Запустить тесты, убедиться, что проходят**
 
 Run: `.venv/bin/pytest tests/test_github.py tests/test_activities.py -q`
-Expected: PASS, 12 passed
+Expected: PASS, 14 passed
 
 - [ ] **Step 5: Коммит**
 
@@ -500,7 +500,7 @@ Expected: FAIL, `AttributeError: 'RunReport' object has no attribute 'stand_deta
 - [ ] **Step 4: Прогнать весь набор**
 
 Run: `.venv/bin/pytest -q`
-Expected: PASS, 97 passed
+Expected: PASS, 101 passed
 
 - [ ] **Step 5: Коммит**
 

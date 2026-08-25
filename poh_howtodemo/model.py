@@ -140,3 +140,7 @@ class RunReport:
     ref: str = ""
     pr_number: int = 0
     evidence_branch: str = ""
+    # Почему окружения не было. Пусто — стенд поднялся. «PR не найден» и «в
+    # контракте нет service.start» лечатся по-разному, и молчать о разнице
+    # значит отправлять человека гадать.
+    stand_detail: str = ""

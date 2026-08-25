@@ -107,4 +107,5 @@ def verify(repo: str, issue: int, pr_number: int, base_url: str, root: str,
 
     return RunReport(anchor=a, results=results, verdict=verdict.overall(results),
                      scenario_changed=changed, ref=ref, pr_number=pr_number,
-                     evidence_branch=branch if published else "")
+                     evidence_branch=branch if published else "",
+                     stand_detail=stand_detail)

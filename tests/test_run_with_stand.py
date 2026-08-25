@@ -125,3 +125,13 @@ def test_command_runs_in_the_working_copy(tmp_path):
     rep = _run_cli(_Stand(), tmp_path, exec_)
     assert seen["cwd"] == "/workspaces/howtodemo/o__r-12/3a1f0c2"
     assert rep.results[0].outcome == model.PASSED
+
+
+def test_report_carries_the_reason_the_stand_did_not_come_up(tmp_path):
+    rep = _run(_Stand(ok=False), tmp_path, send=lambda m, u, j: (200, "{}"))
+    assert rep.stand_detail == "нечем поднимать"
+
+
+def test_successful_stand_leaves_no_reason(tmp_path):
+    rep = _run(_Stand(), tmp_path, send=lambda m, u, j: (200, '{"status": "ok"}'))
+    assert rep.stand_detail == ""
