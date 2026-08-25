@@ -55,14 +55,22 @@ def to_json(steps: list[Step]) -> str:
     return json.dumps({"steps": [asdict(s) for s in steps]}, ensure_ascii=False, indent=2)
 
 
-def build(scenario: list[str], translate: Callable[[list[str]], str]) -> list[Step]:
+def build(scenario: list[str], translate: Callable[[list[str]], str],
+          strict: bool = True) -> list[Step]:
     """Собрать план по сценарию.
 
-    Число шагов обязано совпасть: молча потерянный шаг — это молча
-    непроверенное требование, самый дорогой класс отказов в контуре.
+    `strict` — сценарий пришёл нумерованным списком, и тогда число шагов
+    обязано совпасть: молча потерянный шаг это молча непроверенное требование,
+    самый дорогой класс отказов в контуре.
+
+    Свободная форма (`strict=False`) приезжает одним элементом — блоком `curl`
+    с «Ожидаемо: …», как люди пишут HowToDemo в теле Issue. Такой блок
+    законно разворачивается в несколько шагов, и требовать совпадения один к
+    одному значило бы отвергать нормальный план. Требование остаётся одно:
+    хотя бы один шаг.
     """
     steps = from_json(translate(scenario))
-    if len(steps) != len(scenario):
+    if strict and len(steps) != len(scenario):
         raise PlanError(
             f"в сценарии {len(scenario)} шагов, в плане {len(steps)} — план неполон")
     return steps

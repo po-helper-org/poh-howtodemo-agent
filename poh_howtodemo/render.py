@@ -40,6 +40,11 @@ def report_md(rep: RunReport) -> str:
            f"Сценарий зафиксирован {rep.anchor.taken_at}: {origin} "
            f"#{rep.anchor.issue}, sha256 `{rep.anchor.sha256[:8]}…`",
            f"Вердикт: **{_WORD.get(rep.verdict, rep.verdict)}** (`{rep.verdict}`)"]
+    if not rep.anchor.numbered:
+        out += ["",
+                "> Сценарий записан свободной формой, без нумерованного списка — "
+                "шаги плана выделены из него автоматически. Сверьте, что ничего "
+                "не потеряно."]
     if rep.scenario_changed:
         out += ["",
                 "> ⚠️ Сценарий **менялся после фиксации**. Прогон шёл по "

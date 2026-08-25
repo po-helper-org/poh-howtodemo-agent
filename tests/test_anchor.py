@@ -61,3 +61,44 @@ def test_reread_reports_change():
     steps, changed = anchor.reread(a, changed_body, [])
     assert changed is True
     assert "204" in steps[1]
+
+
+# --- свободная форма: как HowToDemo пишут люди ---
+
+FREE_FORM = """Надо починить расчёт.
+
+## HowToDemo
+
+```bash
+npm start
+curl -sX POST localhost:8080/quote -H 'content-type: application/json' \\
+  -d '{"items":[{"sku":"a","price":100,"qty":6}]}'
+```
+
+Ожидаемо: `{"goods":600,"packages":2,"delivery":400,"total":1000}`
+"""
+
+
+def test_unnumbered_block_is_kept_whole_not_dropped():
+    """На живом корпусе человеческий HowToDemo — блок curl без нумерации."""
+    block = anchor.extract_block(FREE_FORM)
+    steps = anchor.parse_steps(block)
+    assert len(steps) == 1
+    assert "curl" in steps[0] and "Ожидаемо" in steps[0]
+
+
+def test_anchor_marks_scenario_as_free_form():
+    got = anchor.fix(29, FREE_FORM, [])
+    assert got is not None
+    a, _ = got
+    assert a.numbered is False
+
+
+def test_numbered_scenario_stays_marked_numbered():
+    a, _ = anchor.fix(12, BODY_FORM, [])
+    assert a.numbered is True
+
+
+def test_is_numbered_ignores_empty_block():
+    assert anchor.is_numbered(None) is False
+    assert anchor.is_numbered("") is False

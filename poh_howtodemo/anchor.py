@@ -47,11 +47,29 @@ def extract_block(text: str) -> str | None:
     return None
 
 
+def is_numbered(block: str | None) -> bool:
+    """Есть ли в блоке нумерованный список."""
+    if not block:
+        return False
+    return any(_NUMBERED.match(ln) for ln in block.splitlines())
+
+
 def parse_steps(block: str | None) -> list[str]:
-    """Нумерованные строки блока. Ненумерованное (код, пояснения) отбрасываем."""
+    """Шаги сценария.
+
+    Нумерованный список разбираем построчно — так пишет письмо БФТ.
+
+    Люди пишут иначе: на живом корпусе `poh-demo-checkout` раздел HowToDemo
+    в теле Issue — это блоки `curl` со строками «Ожидаемо: …» и ни одной
+    нумерованной строки (#29, #19, #13). Такой блок отдаём целиком одним
+    элементом: пусть трансляция разбирает его как есть, а не как пустоту.
+    Отбросить его молча значило бы сказать «сценария нет» там, где он есть.
+    """
     if not block:
         return []
-    return [m.group(1) for m in (_NUMBERED.match(ln) for ln in block.splitlines()) if m]
+    if is_numbered(block):
+        return [m.group(1) for m in (_NUMBERED.match(ln) for ln in block.splitlines()) if m]
+    return [block.strip()]
 
 
 def digest(text: str) -> str:
@@ -73,7 +91,8 @@ def fix(issue: int, body: str,
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     block = extract_block(body)
     if block:
-        return (Anchor(issue=issue, source=BODY, sha256=digest(block), taken_at=now),
+        return (Anchor(issue=issue, source=BODY, sha256=digest(block), taken_at=now,
+                       numbered=is_numbered(block)),
                 parse_steps(block))
     for comment_id, text in comments:
         if not _is_first_edition(text):
@@ -81,7 +100,8 @@ def fix(issue: int, body: str,
         block = extract_block(text)
         if block:
             return (Anchor(issue=issue, source=COMMENT, comment_id=comment_id,
-                           sha256=digest(block), taken_at=now),
+                           sha256=digest(block), taken_at=now,
+                           numbered=is_numbered(block)),
                     parse_steps(block))
     return None
 
