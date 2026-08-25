@@ -1,7 +1,10 @@
-"""Прогон приёмки целиком: якорь → план → шаги → вердикт → отчёт.
+"""Прогон приёмки целиком: стенд → якорь → план → шаги → вердикт → отчёт.
 
 Всё внешнее приходит параметрами, поэтому прогон целиком проверяется без сети,
 без докера и без Temporal. Активности только подставляют настоящие реализации.
+
+Стенд необязателен: без него HTTP-шаги дают `blocked` и уходят в «Требует
+человека». Это честный результат, а не отказ прогона.
 """
 
 import json
@@ -9,6 +12,7 @@ import json
 from poh_howtodemo import anchor, plan, publish, verdict
 from poh_howtodemo.collectors import cli as cli_collector
 from poh_howtodemo.collectors import http as http_collector
+from poh_howtodemo.collectors import logs as log_collector
 from poh_howtodemo.model import (BROWSER, CLI, HTTP, UNMAPPED, Anchor, Evidence,
                                  Observation, RunReport, Step, V_NO_SCENARIO)
 
@@ -38,8 +42,26 @@ def _observe(step: Step, base_url: str, root: str, send,
     return None, []
 
 
+def _walk(steps: list[Step], base_url: str, root: str, send, exec_,
+          container: str, run_docker) -> list:
+    """Пройти шаги, приложив к каждому логи сервиса за окно этого шага."""
+    results = []
+    for step in steps:
+        since = log_collector.stamp()
+        obs, evidence = _observe(step, base_url, root, send, exec_)
+        if container and run_docker is not None and obs is not None:
+            text = log_collector.window(run_docker, container, since,
+                                        log_collector.stamp())
+            evidence.append(publish.write_evidence(
+                root, step.n, "service_log.txt", text.encode("utf-8")))
+        results.append(verdict.judge(step, obs, evidence))
+    return results
+
+
 def verify(repo: str, issue: int, pr_number: int, base_url: str, root: str,
-           gh, translate, send, exec_, run_git, token: str) -> RunReport:
+           gh, translate, send, exec_, run_git, token: str,
+           stand=None, sha: str = "", service: dict | None = None,
+           run_docker=None) -> RunReport:
     body = gh.issue_body(repo, issue)
     comments = gh.comments(repo, issue)
 
@@ -50,10 +72,19 @@ def verify(repo: str, issue: int, pr_number: int, base_url: str, root: str,
     _, changed = anchor.reread(a, body, comments)
 
     steps = plan.build(scenario, translate)
-    results = []
-    for step in steps:
-        obs, evidence = _observe(step, base_url, root, send, exec_)
-        results.append(verdict.judge(step, obs, evidence))
+
+    container = ""
+    try:
+        if stand is not None:
+            up = stand.up(repo, issue, sha, service or {})
+            if up.ok:
+                base_url, container = up.url, up.container
+        results = _walk(steps, base_url, root, send, exec_, container, run_docker)
+    finally:
+        # Стенд гасится при любом исходе: осиротевший контейнер держит порт и
+        # память на хосте, где свободного меньше гигабайта.
+        if stand is not None:
+            stand.down(repo, issue)
 
     branch = publish.branch_name(issue)
     published = publish.push(root, repo, branch, token, run_git)
