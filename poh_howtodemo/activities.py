@@ -62,9 +62,25 @@ def build_stand(token_provider) -> env.EphemeralStand:
                               network=os.environ.get("HOWTODEMO_NETWORK", ""))
 
 
+def resolve_pull(gh, repo: str, issue: int, pr_number: int) -> int:
+    """Номер PR задачи.
+
+    Вебхук событий `pull_request` не слушает, поэтому триггер приносит ноль
+    почти всегда. Спрашиваем GitHub сами: без PR нет SHA, без SHA нет стенда,
+    без стенда не исполняется ни один шаг сценария.
+
+    Явно переданный номер не перепроверяем — он пришёл от того, кто знает
+    больше нас.
+    """
+    if pr_number:
+        return pr_number
+    return gh.linked_pull(repo, issue)
+
+
 @activity.defn(name="howtodemo_verify")
 async def verify(repo: str, issue: int, pr_number: int) -> RunReport:
     gh = ports.github()
+    pr_number = resolve_pull(gh, repo, issue, pr_number)
     sha = ""
     if pr_number:
         _ref, sha = gh.pull_head(repo, pr_number)

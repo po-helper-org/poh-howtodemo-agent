@@ -51,3 +51,25 @@ async def test_real_verdict_sets_demo_label(monkeypatch):
     assert model.V_PARTIAL in gh.added
     assert activities.DONE_LABEL in gh.added
     assert activities.RUN_LABEL in gh.removed
+
+
+class _GHPull:
+    def __init__(self, linked):
+        self.linked = linked
+        self.asked = []
+
+    def linked_pull(self, repo, issue):
+        self.asked.append((repo, issue))
+        return self.linked
+
+
+def test_pull_is_resolved_when_the_trigger_did_not_carry_it():
+    gh = _GHPull(77)
+    assert activities.resolve_pull(gh, "o/r", 12, 0) == 77
+    assert gh.asked == [("o/r", 12)]
+
+
+def test_explicit_pull_number_is_not_second_guessed():
+    gh = _GHPull(77)
+    assert activities.resolve_pull(gh, "o/r", 12, 45) == 45
+    assert gh.asked == []

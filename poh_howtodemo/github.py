@@ -11,12 +11,43 @@
 `401 Bad credentials` посреди работы.
 """
 
+import re
 from typing import Callable
 
 import requests
 
 API = "https://api.github.com"
 TIMEOUT = 30
+
+_CLOSING = re.compile(r"\b(?:clos(?:e|es|ed)|fix(?:e[sd])?|resolv(?:e|es|ed))\s+#(\d+)",
+                      re.IGNORECASE)
+
+
+def pick_pull(events: list[dict], issue: int) -> int:
+    """Выбрать PR задачи из событий Timeline. 0 — не нашли.
+
+    Кросс-ссылка означает любое упоминание, а не «этот PR делает эту задачу».
+    Поэтому сначала ищем закрывающее ключевое слово на НАШ номер в теле PR, и
+    только если его нет — берём самый свежий открытый. Закрытые не берём
+    вовсе: приёмка идёт по живому PR.
+    """
+    open_pulls: list[int] = []
+    closing: list[int] = []
+    for event in events:
+        if event.get("event") != "cross-referenced":
+            continue
+        src = (event.get("source") or {}).get("issue") or {}
+        if "pull_request" not in src or src.get("state") != "open":
+            continue
+        number = src.get("number")
+        if number is None:
+            continue
+        open_pulls.append(number)
+        if any(int(m) == issue for m in _CLOSING.findall(src.get("body") or "")):
+            closing.append(number)
+    if closing:
+        return closing[-1]
+    return open_pulls[-1] if open_pulls else 0
 
 
 class RestGitHub:
@@ -71,6 +102,13 @@ class RestGitHub:
         r.raise_for_status()
         head = r.json()["head"]
         return head["ref"], head["sha"]
+
+    def linked_pull(self, repo: str, issue: int) -> int:
+        r = requests.get(f"{API}/repos/{repo}/issues/{issue}/timeline",
+                         headers=self._headers(repo),
+                         params={"per_page": 100}, timeout=TIMEOUT)
+        r.raise_for_status()
+        return pick_pull(r.json(), issue)
 
     def get_file(self, repo: str, path: str, ref: str) -> str | None:
         r = requests.get(f"{API}/repos/{repo}/contents/{path}",
