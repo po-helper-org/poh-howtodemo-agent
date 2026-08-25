@@ -13,15 +13,18 @@ from poh_howtodemo import anchor, plan, publish, verdict
 from poh_howtodemo.collectors import cli as cli_collector
 from poh_howtodemo.collectors import http as http_collector
 from poh_howtodemo.collectors import logs as log_collector
-from poh_howtodemo.model import (BROWSER, CLI, HTTP, UNMAPPED, Anchor, Evidence,
-                                 Observation, RunReport, Step, V_NO_SCENARIO)
+from poh_howtodemo.model import (ASSERT, BROWSER, CLI, HTTP, UNMAPPED, Anchor,
+                                 Evidence, Observation, RunReport, Step,
+                                 V_NO_SCENARIO)
 
 
 def _observe(step: Step, base_url: str, workdir: str, root: str, send,
              exec_) -> tuple[Observation | None, list[Evidence]]:
     """Исполнить шаг и вернуть (наблюдение, улики). None — шаг не запускался."""
     kind = step.action.kind
-    if kind in (UNMAPPED, BROWSER):
+    if kind in (UNMAPPED, BROWSER, ASSERT):
+        # ASSERT ничего не исполняет: его наблюдение приходит от шага, о
+        # котором он утверждает. Привязку делает _walk.
         return None, []
     if kind == HTTP:
         if not base_url or send is None:
@@ -50,9 +53,33 @@ def _observe(step: Step, base_url: str, workdir: str, root: str, send,
 
 def _walk(steps: list[Step], base_url: str, workdir: str, root: str, send, exec_,
           container: str, run_docker) -> list:
-    """Пройти шаги, приложив к каждому логи сервиса за окно этого шага."""
+    """Пройти шаги, приложив к каждому логи сервиса за окно этого шага.
+
+    Утверждение (`ASSERT`) не исполняется, а проверяется по наблюдению
+    последнего исполненного шага — и его уликами же и подтверждается: ответ,
+    о котором утверждение, уже лежит в `evidence` того шага.
+
+    Привязку считает КОД, а не модель: сценарий «отправить запрос → увидеть
+    код → увидеть поле» читается сверху вниз, и последний исполненный шаг —
+    это ровно то, о чём говорит человек.
+    """
     results = []
+    last_obs: Observation | None = None
+    last_step = 0
+    last_evidence: list[Evidence] = []
     for step in steps:
+        if step.action.kind == ASSERT:
+            bound = step.action.on or last_step
+            if last_obs is None:
+                results.append(verdict.judge(step, None, []))
+                results[-1].detail = ("нечего проверять: до этого шага ни один "
+                                      "не исполнился")
+                continue
+            result = verdict.judge(step, last_obs, last_evidence)
+            result.on_step = bound
+            results.append(result)
+            continue
+
         since = log_collector.stamp()
         obs, evidence = _observe(step, base_url, workdir, root, send, exec_)
         if container and run_docker is not None and obs is not None:
@@ -60,6 +87,8 @@ def _walk(steps: list[Step], base_url: str, workdir: str, root: str, send, exec_
                                         log_collector.stamp())
             evidence.append(publish.write_evidence(
                 root, step.n, "service_log.txt", text.encode("utf-8")))
+        if obs is not None:
+            last_obs, last_step, last_evidence = obs, step.n, evidence
         results.append(verdict.judge(step, obs, evidence))
     return results
 

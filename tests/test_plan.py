@@ -97,3 +97,10 @@ def test_system_prompt_travels_with_the_package():
     text = plan.system_prompt()
     assert "unmapped" in text and "json_subset" in text
     assert "steps" in text
+
+
+def test_prompt_teaches_the_model_about_chained_assertions():
+    """Цепочные шаги — норма формата, промпт обязан их называть."""
+    text = plan.system_prompt()
+    assert '"assert"' in text or "`assert`" in text
+    assert "предыдущего" in text
