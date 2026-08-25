@@ -866,7 +866,7 @@ async def verify(repo: str, issue: int, pr_number: int) -> RunReport:
 - [ ] **Step 4: Запустить весь набор**
 
 Run: `.venv/bin/pytest -q`
-Expected: PASS, 67 passed
+Expected: PASS, 70 passed
 
 - [ ] **Step 5: Коммит**
 
