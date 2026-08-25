@@ -15,8 +15,15 @@ from datetime import datetime, timezone
 
 
 def stamp() -> str:
-    """Отметка времени в том виде, в каком её понимает `docker logs`."""
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    """Отметка времени для `docker logs`, с долями секунды.
+
+    Секундной точности не хватает: шаг исполняется за миллисекунды, `since` и
+    `until` попадают в одну и ту же секунду, а вырожденное окно
+    (`--since T --until T`) докер отдаёт ПУСТЫМ — даже когда строки за эту
+    секунду есть. Проверено экспериментом. Молчаливо пустая улика хуже
+    отсутствующей: по ней не отличить «сервис молчал» от «сборщик сломан».
+    """
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
 def window(run_cmd, container: str, since: str, until: str) -> str:
@@ -28,4 +35,7 @@ def window(run_cmd, container: str, since: str, until: str) -> str:
         return f"логи снять не удалось: {type(exc).__name__}: {exc}"
     if code != 0:
         return f"логи снять не удалось (код {code}): {output[-500:]}"
+    if not output.strip():
+        # Пустой файл в уликах неотличим от сломанного сборщика. Говорим прямо.
+        return f"за окно шага ({since} .. {until}) сервис не записал ни строки"
     return output
