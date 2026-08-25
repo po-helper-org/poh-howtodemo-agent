@@ -16,6 +16,7 @@
 """
 
 import os
+import socket
 import time
 
 from poh_howtodemo.model import Stand
@@ -32,17 +33,44 @@ def container_name(repo: str, issue: int) -> str:
     return f"poh-howtodemo-{repo.replace('/', '__')}-{issue}"
 
 
+def own_network(run_cmd) -> str:
+    """Сеть, в которой стоит сам воркер, — в неё же ставится стенд.
+
+    Иначе проверка до сервиса не дотянется: стенд адресуется по имени
+    контейнера, а имена резолвятся только внутри общей сети. Публиковать порт
+    на хост ради собственной же проверки значит открыть стенд наружу без нужды.
+
+    Полагаться на переменную окружения нельзя: она доезжает до контейнера
+    только если её пробросил compose, а он этого не делает. Delivery-Agent
+    решает это тем же способом — спрашивает докер.
+    """
+    code, out = run_cmd(["docker", "inspect", socket.gethostname(), "--format",
+                         "{{range $name, $_ := .NetworkSettings.Networks}}"
+                         "{{$name}} {{end}}"])
+    if code != 0:
+        return ""
+    networks = out.split()
+    return networks[0] if networks else ""
+
+
 class EphemeralStand:
     def __init__(self, run_cmd, probe, token_provider, network: str = "",
                  volume: str = VOLUME, mount: str = MOUNT):
         self._run = run_cmd
         self._probe = probe
         self._token_for = token_provider
+        # Пусто — спросим докер при первом подъёме и запомним. None здесь не
+        # используем: пустая строка и есть «ещё не выяснили».
         self._network = network
         self._volume = volume
         self._mount = mount
         self.ready_timeout = READY_TIMEOUT
         self.poll_seconds = POLL_SECONDS
+
+    def _resolved_network(self) -> str:
+        if not self._network:
+            self._network = own_network(self._run) or "-"
+        return "" if self._network == "-" else self._network
 
     def _workdir(self, repo: str, issue: int, sha: str) -> str:
         return f"{self._mount}/howtodemo/{repo.replace('/', '__')}-{issue}/{sha}"
@@ -78,8 +106,9 @@ class EphemeralStand:
 
         self._run(["docker", "rm", "-f", name])
         command = ["docker", "run", "-d", "--rm", "--name", name]
-        if self._network:
-            command += ["--network", self._network]
+        network = self._resolved_network()
+        if network:
+            command += ["--network", network]
         command += ["-v", f"{self._volume}:{self._mount}", "-w", target,
                     "-e", f"PORT={port}", image, "sh", "-c", start]
         code, output = self._run(command)
