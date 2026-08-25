@@ -100,3 +100,84 @@ def test_token_is_only_in_the_remote_url():
     _stand(docker, [200]).up("o/r", 12, "abc123", SERVICE)
     carrying = [c for c in docker.flat() if "ghs_x" in c]
     assert len(carrying) == 1 and "remote add" in carrying[0]
+
+
+def test_stand_reports_the_working_copy():
+    docker = _Docker()
+    got = _stand(docker, [200]).up("o/r", 12, "abc123", SERVICE)
+    assert got.workdir.endswith("/howtodemo/o__r-12/abc123")
+
+
+def test_failed_stand_has_no_working_copy():
+    docker = _Docker()
+    got = _stand(docker, []).up("o/r", 12, "abc123", {"port": 3000})
+    assert got.workdir == ""
+
+
+# --- сеть: без неё воркер не достучится до стенда по имени контейнера ---
+
+class _NetDocker(_Docker):
+    def __init__(self, networks="compose_default other", inspect_code=0):
+        super().__init__()
+        self.networks = networks
+        self.inspect_code = inspect_code
+
+    def __call__(self, args):
+        self.calls.append(args)
+        if "inspect" in args:
+            return self.inspect_code, self.networks
+        return 0, "ok"
+
+
+def _net_stand(docker, network=""):
+    return env.EphemeralStand(run_cmd=docker, probe=lambda url: 200,
+                              token_provider=lambda repo: "ghs_x", network=network)
+
+
+def test_own_network_is_asked_when_none_configured():
+    """Переменной в контейнере нет — спрашиваем докер, как это делает Delivery."""
+    docker = _NetDocker()
+    _net_stand(docker).up("o/r", 12, "abc123", SERVICE)
+    run_line = next(c for c in docker.flat() if "docker run" in c)
+    assert "--network compose_default" in run_line
+
+
+def test_configured_network_wins_and_docker_is_not_asked():
+    docker = _NetDocker()
+    _net_stand(docker, network="явная").up("o/r", 12, "abc123", SERVICE)
+    assert not any("inspect" in c for c in docker.flat())
+    assert "--network явная" in next(c for c in docker.flat() if "docker run" in c)
+
+
+def test_unknown_network_degrades_instead_of_crashing():
+    docker = _NetDocker(inspect_code=1)
+    got = _net_stand(docker).up("o/r", 12, "abc123", SERVICE)
+    assert got.ok is True
+    assert "--network" not in next(c for c in docker.flat() if "docker run" in c)
+
+
+def test_network_is_resolved_once_per_stand():
+    docker = _NetDocker()
+    stand = _net_stand(docker)
+    stand.up("o/r", 12, "abc123", SERVICE)
+    stand.up("o/r", 12, "def456", SERVICE)
+    assert len([c for c in docker.flat() if "inspect" in c]) == 1
+
+
+# --- локальный прогон: с ноутбука имя контейнера не резолвится ---
+
+def test_published_port_makes_the_stand_reachable_from_outside_docker():
+    docker = _NetDocker()
+    stand = env.EphemeralStand(run_cmd=docker, probe=lambda url: 200,
+                               token_provider=lambda repo: "ghs_x",
+                               network="net", publish_port=True)
+    got = stand.up("o/r", 12, "abc123", SERVICE)
+    assert got.url == "http://127.0.0.1:3000"
+    assert "-p 3000:3000" in next(c for c in docker.flat() if "docker run" in c)
+
+
+def test_inside_docker_the_stand_stays_unpublished():
+    docker = _NetDocker()
+    got = _net_stand(docker, network="net").up("o/r", 12, "abc123", SERVICE)
+    assert got.url == f"http://{env.container_name('o/r', 12)}:3000"
+    assert "-p " not in next(c for c in docker.flat() if "docker run" in c)

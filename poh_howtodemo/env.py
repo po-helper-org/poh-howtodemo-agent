@@ -16,6 +16,7 @@
 """
 
 import os
+import socket
 import time
 
 from poh_howtodemo.model import Stand
@@ -32,17 +33,49 @@ def container_name(repo: str, issue: int) -> str:
     return f"poh-howtodemo-{repo.replace('/', '__')}-{issue}"
 
 
+def own_network(run_cmd) -> str:
+    """Сеть, в которой стоит сам воркер, — в неё же ставится стенд.
+
+    Иначе проверка до сервиса не дотянется: стенд адресуется по имени
+    контейнера, а имена резолвятся только внутри общей сети. Публиковать порт
+    на хост ради собственной же проверки значит открыть стенд наружу без нужды.
+
+    Полагаться на переменную окружения нельзя: она доезжает до контейнера
+    только если её пробросил compose, а он этого не делает. Delivery-Agent
+    решает это тем же способом — спрашивает докер.
+    """
+    code, out = run_cmd(["docker", "inspect", socket.gethostname(), "--format",
+                         "{{range $name, $_ := .NetworkSettings.Networks}}"
+                         "{{$name}} {{end}}"])
+    if code != 0:
+        return ""
+    networks = out.split()
+    return networks[0] if networks else ""
+
+
 class EphemeralStand:
     def __init__(self, run_cmd, probe, token_provider, network: str = "",
-                 volume: str = VOLUME, mount: str = MOUNT):
+                 volume: str = VOLUME, mount: str = MOUNT,
+                 publish_port: bool = False):
         self._run = run_cmd
         self._probe = probe
         self._token_for = token_provider
+        # Пусто — спросим докер при первом подъёме и запомним. None здесь не
+        # используем: пустая строка и есть «ещё не выяснили».
         self._network = network
         self._volume = volume
         self._mount = mount
+        # Внутри контура стенд адресуется по имени контейнера и наружу не
+        # публикуется — открывать порт ради собственной же проверки незачем.
+        # Локальному прогону с ноутбука имя не резолвится, и порт нужен.
+        self._publish_port = publish_port
         self.ready_timeout = READY_TIMEOUT
         self.poll_seconds = POLL_SECONDS
+
+    def _resolved_network(self) -> str:
+        if not self._network:
+            self._network = own_network(self._run) or "-"
+        return "" if self._network == "-" else self._network
 
     def _workdir(self, repo: str, issue: int, sha: str) -> str:
         return f"{self._mount}/howtodemo/{repo.replace('/', '__')}-{issue}/{sha}"
@@ -78,8 +111,11 @@ class EphemeralStand:
 
         self._run(["docker", "rm", "-f", name])
         command = ["docker", "run", "-d", "--rm", "--name", name]
-        if self._network:
-            command += ["--network", self._network]
+        network = self._resolved_network()
+        if network:
+            command += ["--network", network]
+        if self._publish_port:
+            command += ["-p", f"{port}:{port}"]
         command += ["-v", f"{self._volume}:{self._mount}", "-w", target,
                     "-e", f"PORT={port}", image, "sh", "-c", start]
         code, output = self._run(command)
@@ -87,12 +123,14 @@ class EphemeralStand:
             return Stand(ok=False, container=name,
                          detail=f"docker run: {output[-300:]}")
 
-        url = f"http://{name}:{port}"
+        url = (f"http://127.0.0.1:{port}" if self._publish_port
+               else f"http://{name}:{port}")
         ready, detail = self._wait_ready(url, service, name)
         if not ready:
             self.down(repo, issue)
             return Stand(ok=False, container=name, detail=detail)
-        return Stand(ok=True, url=url, container=name, detail=detail)
+        return Stand(ok=True, url=url, container=name, workdir=target,
+                     detail=detail)
 
     def _wait_ready(self, url: str, service: dict, name: str) -> tuple[bool, str]:
         health = service.get("health_path", "/")

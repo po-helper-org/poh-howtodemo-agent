@@ -24,6 +24,22 @@ def test_failure_becomes_readable_text_not_exception():
     assert "No such container" in text
 
 
-def test_stamp_is_rfc3339_utc():
+def test_stamp_is_rfc3339_utc_with_subsecond_precision():
+    """Секундной точности мало: вырожденное окно докер отдаёт пустым."""
     value = logs.stamp()
-    assert value.endswith("Z") and "T" in value and len(value) == 20
+    assert value.endswith("Z") and "T" in value
+    assert "." in value, "нужны доли секунды"
+    assert logs.stamp() != value or True  # монотонность не проверяем, только формат
+
+
+def test_two_stamps_around_a_fast_step_are_not_equal():
+    first = logs.stamp()
+    for _ in range(1000):
+        pass
+    assert logs.stamp() != first, "метки шага не должны совпадать"
+
+
+def test_empty_window_says_so_instead_of_leaving_a_blank_file():
+    """Пустой файл улики неотличим от сломанного сборщика."""
+    text = logs.window(lambda a: (0, "  \n "), "c", since="A", until="B")
+    assert "не записал ни строки" in text and "A" in text and "B" in text

@@ -60,3 +60,14 @@ def test_free_form_scenario_is_flagged_for_the_reader():
 
 def test_numbered_scenario_says_nothing_extra():
     assert "свободной формой" not in render.report_md(_report())
+
+
+def test_report_explains_why_there_was_no_environment():
+    rep = _report()
+    rep.stand_detail = "в .delivery/checks.json нет service.start"
+    body = render.report_md(rep)
+    assert "service.start" in body and "не запускались" in body
+
+
+def test_report_says_nothing_about_environment_when_it_came_up():
+    assert "Окружение поднять не удалось" not in render.report_md(_report())
