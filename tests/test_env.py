@@ -162,3 +162,22 @@ def test_network_is_resolved_once_per_stand():
     stand.up("o/r", 12, "abc123", SERVICE)
     stand.up("o/r", 12, "def456", SERVICE)
     assert len([c for c in docker.flat() if "inspect" in c]) == 1
+
+
+# --- локальный прогон: с ноутбука имя контейнера не резолвится ---
+
+def test_published_port_makes_the_stand_reachable_from_outside_docker():
+    docker = _NetDocker()
+    stand = env.EphemeralStand(run_cmd=docker, probe=lambda url: 200,
+                               token_provider=lambda repo: "ghs_x",
+                               network="net", publish_port=True)
+    got = stand.up("o/r", 12, "abc123", SERVICE)
+    assert got.url == "http://127.0.0.1:3000"
+    assert "-p 3000:3000" in next(c for c in docker.flat() if "docker run" in c)
+
+
+def test_inside_docker_the_stand_stays_unpublished():
+    docker = _NetDocker()
+    got = _net_stand(docker, network="net").up("o/r", 12, "abc123", SERVICE)
+    assert got.url == f"http://{env.container_name('o/r', 12)}:3000"
+    assert "-p " not in next(c for c in docker.flat() if "docker run" in c)

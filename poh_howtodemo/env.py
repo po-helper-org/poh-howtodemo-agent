@@ -55,7 +55,8 @@ def own_network(run_cmd) -> str:
 
 class EphemeralStand:
     def __init__(self, run_cmd, probe, token_provider, network: str = "",
-                 volume: str = VOLUME, mount: str = MOUNT):
+                 volume: str = VOLUME, mount: str = MOUNT,
+                 publish_port: bool = False):
         self._run = run_cmd
         self._probe = probe
         self._token_for = token_provider
@@ -64,6 +65,10 @@ class EphemeralStand:
         self._network = network
         self._volume = volume
         self._mount = mount
+        # Внутри контура стенд адресуется по имени контейнера и наружу не
+        # публикуется — открывать порт ради собственной же проверки незачем.
+        # Локальному прогону с ноутбука имя не резолвится, и порт нужен.
+        self._publish_port = publish_port
         self.ready_timeout = READY_TIMEOUT
         self.poll_seconds = POLL_SECONDS
 
@@ -109,6 +114,8 @@ class EphemeralStand:
         network = self._resolved_network()
         if network:
             command += ["--network", network]
+        if self._publish_port:
+            command += ["-p", f"{port}:{port}"]
         command += ["-v", f"{self._volume}:{self._mount}", "-w", target,
                     "-e", f"PORT={port}", image, "sh", "-c", start]
         code, output = self._run(command)
@@ -116,7 +123,8 @@ class EphemeralStand:
             return Stand(ok=False, container=name,
                          detail=f"docker run: {output[-300:]}")
 
-        url = f"http://{name}:{port}"
+        url = (f"http://127.0.0.1:{port}" if self._publish_port
+               else f"http://{name}:{port}")
         ready, detail = self._wait_ready(url, service, name)
         if not ready:
             self.down(repo, issue)

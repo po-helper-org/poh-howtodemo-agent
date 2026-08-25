@@ -11,11 +11,24 @@
 
 import json
 from dataclasses import asdict
+from pathlib import Path
 from typing import Callable
 
 from poh_howtodemo.model import BROWSER, CLI, HTTP, UNMAPPED, Action, Expect, Step
 
 KINDS = {HTTP, CLI, BROWSER, UNMAPPED}
+
+PROMPT = Path(__file__).parent / "prompts" / "system_plan.md"
+
+
+def system_prompt() -> str:
+    """Промпт трансляции. Живёт в пакете, а не у потребителя.
+
+    Промпт — часть договора агента с моделью, наравне с форматом плана: их
+    правят вместе, и разъехаться они не должны. Копия в чужом репозитории
+    рано или поздно отстаёт — в контуре так уже отстала копия скилла bft-writer.
+    """
+    return PROMPT.read_text(encoding="utf-8")
 
 
 class PlanError(Exception):

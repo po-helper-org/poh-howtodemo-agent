@@ -20,3 +20,8 @@ dev = ["pytest>=8.0"]
 
 [tool.setuptools.packages.find]
 include = ["poh_howtodemo*"]
+
+# Промпт трансляции едет вместе с пакетом: он часть договора с моделью, и
+# держать его в репозитории-потребителе значит дать копии разъехаться.
+[tool.setuptools.package-data]
+poh_howtodemo = ["prompts/*.md"]

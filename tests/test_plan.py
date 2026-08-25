@@ -90,3 +90,10 @@ def test_source_follows_the_plan_step_number():
     ]})
     steps = plan.build(["блок"], lambda s: raw, issue=7, strict=False)
     assert [s.source for s in steps] == ["Issue #7, шаг 1", "Issue #7, шаг 2"]
+
+
+def test_system_prompt_travels_with_the_package():
+    """Промпт — часть договора с моделью. Копия у потребителя отстанет."""
+    text = plan.system_prompt()
+    assert "unmapped" in text and "json_subset" in text
+    assert "steps" in text
