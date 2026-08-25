@@ -1,0 +1,68 @@
+"""Сценарий → машиночитаемый план.
+
+Модель зовётся здесь ровно один раз и только для трансляции текста в действия.
+Решать, сошлось ли ожидание, она не будет нигде: вердикт считает verdict.py.
+
+План — артефакт. Повторный прогон переиспользует его, и провал читается как
+«шаг 3 не исполнился», а не как молчание.
+
+Модуль чистый: вызов модели приходит параметром.
+"""
+
+import json
+from dataclasses import asdict
+from typing import Callable
+
+from poh_howtodemo.model import BROWSER, CLI, HTTP, UNMAPPED, Action, Expect, Step
+
+KINDS = {HTTP, CLI, BROWSER, UNMAPPED}
+
+
+class PlanError(Exception):
+    """План не годится к исполнению."""
+
+
+def _action(raw: dict) -> Action:
+    kind = raw.get("kind", UNMAPPED)
+    if kind not in KINDS:
+        raise PlanError(f"неизвестный вид действия: {kind}")
+    return Action(kind=kind, method=raw.get("method", "GET"), path=raw.get("path", "/"),
+                  body=raw.get("body"), command=raw.get("command", ""))
+
+
+def _expect(raw: dict) -> Expect:
+    return Expect(status=raw.get("status"), json_subset=raw.get("json_subset", {}),
+                  contains=raw.get("contains", ""), exit_code=raw.get("exit_code"))
+
+
+def from_json(raw: str) -> list[Step]:
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise PlanError(f"план не разобрался как JSON: {exc}") from exc
+    items = data.get("steps")
+    if not isinstance(items, list) or not items:
+        raise PlanError("в плане нет ни одного шага")
+    return [Step(n=item.get("n", i + 1), text=item.get("text", ""),
+                 action=_action(item.get("action", {})),
+                 expect=_expect(item.get("expect", {})),
+                 evidence=list(item.get("evidence", [])),
+                 source=item.get("source", ""))
+            for i, item in enumerate(items)]
+
+
+def to_json(steps: list[Step]) -> str:
+    return json.dumps({"steps": [asdict(s) for s in steps]}, ensure_ascii=False, indent=2)
+
+
+def build(scenario: list[str], translate: Callable[[list[str]], str]) -> list[Step]:
+    """Собрать план по сценарию.
+
+    Число шагов обязано совпасть: молча потерянный шаг — это молча
+    непроверенное требование, самый дорогой класс отказов в контуре.
+    """
+    steps = from_json(translate(scenario))
+    if len(steps) != len(scenario):
+        raise PlanError(
+            f"в сценарии {len(scenario)} шагов, в плане {len(steps)} — план неполон")
+    return steps
