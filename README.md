@@ -69,13 +69,14 @@ poh_howtodemo/
   model.py       факты и решения (dataclass'ы, ездят через Temporal)
   anchor.py      поиск и фиксация сценария указателем с хэшем
   plan.py        сценарий → машиночитаемый план
-  execute.py     диспетчер шага по типу действия
-  collectors/    сбор доказательств: http | cli | logs | browser
+  checks.py      контракт окружения из .delivery/checks.json целевого репо
   env.py         эфемерный стенд из произвольного SHA
-  verdict.py     чистый код: passed / failed / unmapped
+  collectors/    сбор доказательств: http | cli | logs (browser — срез 3)
+  verdict.py     чистый код: passed / failed / skipped / blocked
   render.py      отчёт «Что готово / Что не соответствует»
   publish.py     git-пуш улик в ветку howtodemo/issue-<n>
-  ports.py       протоколы GitHub, Docker, LLM
+  run.py         прогон целиком, всё внешнее приходит параметрами
+  ports.py       протоколы GitHub, модели, оболочки
   github.py      реализация GitHub-порта поверх REST
   activities.py  активности Temporal — весь ввод-вывод
   workflow.py    HowToDemoVerify
@@ -88,5 +89,19 @@ poh_howtodemo/
 
 ## Состояние
 
-Срез 1 в работе: якорь, план, `http`/`cli`, вердикт, отчёт, публикация улик.
-Порядок дальнейших срезов — в дизайне.
+**Срез 1** — якорь, план, `http`/`cli`, вердикт, отчёт, публикация улик. Влит.
+**Срез 2** — эфемерный стенд из произвольного SHA, контракт окружения из
+целевого репозитория, логи сервиса за окно шага. В работе.
+
+Впереди: срез 3 — браузер (после замера памяти на стенде); срез 4 — возврат в
+доработку, SubIssue на несоответствия, блокировка релиза. Врезка в фазу
+`testing` и регистрация `/howtodemo` живут в `poh-issue-agents` и уезжают
+отдельным PR туда.
+
+Ядро (`anchor`, `plan`, `checks`, `verdict`, `render`, `run`) чистое: тесты
+гоняются без сети, без докера и без Temporal.
+
+```bash
+python -m venv .venv && .venv/bin/pip install -e ".[dev]" pytest-asyncio
+.venv/bin/pytest -q
+```

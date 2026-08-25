@@ -5,12 +5,13 @@
 починку сетевого сбоя. Повтор инициирует человек.
 """
 
+import os
 import subprocess
 
 import requests
 from temporalio import activity
 
-from poh_howtodemo import ports, render, run
+from poh_howtodemo import checks, env, ports, render, run
 from poh_howtodemo.model import (RunReport, V_FAILED, V_NO_SCENARIO, V_PARTIAL,
                                  V_PASSED)
 
@@ -42,18 +43,42 @@ def _git(args: list[str], cwd: str) -> tuple[int, str]:
     return p.returncode, (p.stdout or "") + (p.stderr or "")
 
 
+def _docker(args: list[str]) -> tuple[int, str]:
+    p = subprocess.run(args, capture_output=True, text=True, timeout=300)
+    return p.returncode, (p.stdout or "") + (p.stderr or "")
+
+
+def _probe(url: str) -> int:
+    return requests.get(url, timeout=5).status_code
+
+
 def run_root(repo: str, issue: int) -> str:
     return f"{WORKSPACE}/{repo.replace('/', '__')}-{issue}"
 
 
+def build_stand(token_provider) -> env.EphemeralStand:
+    return env.EphemeralStand(run_cmd=_docker, probe=_probe,
+                              token_provider=token_provider,
+                              network=os.environ.get("HOWTODEMO_NETWORK", ""))
+
+
 @activity.defn(name="howtodemo_verify")
 async def verify(repo: str, issue: int, pr_number: int) -> RunReport:
-    # base_url пуст: срез 1 гоняет только шаги, не требующие окружения.
-    # Эфемерный стенд приезжает срезом 2.
+    gh = ports.github()
+    sha = ""
+    if pr_number:
+        _ref, sha = gh.pull_head(repo, pr_number)
+    # Контракт читается из ТОГО ЖЕ SHA, что проверяем: файл мог измениться в
+    # этой же ветке, и брать его с базовой значило бы поднимать сервис по
+    # позавчерашнему описанию.
+    service = checks.read(gh, repo, sha) if sha else {}
+    token = _token_provider(repo) if _token_provider else ""
     return run.verify(repo=repo, issue=issue, pr_number=pr_number, base_url="",
-                      root=run_root(repo, issue), gh=ports.github(),
+                      root=run_root(repo, issue), gh=gh,
                       translate=ports.llm().translate, send=_send,
-                      exec_=_exec, run_git=_git, token=_token_provider())
+                      exec_=_exec, run_git=_git, token=token,
+                      stand=None if _dry_run else build_stand(_token_provider),
+                      sha=sha, service=service, run_docker=_docker)
 
 
 @activity.defn(name="howtodemo_publish")

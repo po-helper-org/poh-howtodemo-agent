@@ -105,6 +105,16 @@ class Evidence:
 
 
 @dataclass
+class Stand:
+    """Эфемерное окружение прогона. `ok=False` — шаги пойдут как blocked."""
+
+    ok: bool = False
+    url: str = ""
+    container: str = ""
+    detail: str = ""
+
+
+@dataclass
 class StepResult:
     n: int
     text: str
