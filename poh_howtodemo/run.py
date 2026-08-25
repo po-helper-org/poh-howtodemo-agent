@@ -17,7 +17,7 @@ from poh_howtodemo.model import (BROWSER, CLI, HTTP, UNMAPPED, Anchor, Evidence,
                                  Observation, RunReport, Step, V_NO_SCENARIO)
 
 
-def _observe(step: Step, base_url: str, root: str, send,
+def _observe(step: Step, base_url: str, workdir: str, root: str, send,
              exec_) -> tuple[Observation | None, list[Evidence]]:
     """Исполнить шаг и вернуть (наблюдение, улики). None — шаг не запускался."""
     kind = step.action.kind
@@ -35,20 +35,26 @@ def _observe(step: Step, base_url: str, root: str, send,
                              ensure_ascii=False, indent=2).encode("utf-8")
         return obs, [publish.write_evidence(root, step.n, "response.json", payload)]
     if kind == CLI:
-        obs = cli_collector.run(step.action, root, exec_)
+        # Рабочая копия приезжает со стендом. Без неё команда отработала бы в
+        # пустом каталоге и соврала про продукт: живой прогон дал
+        # `npm error enoent Could not read package.json` и вердикт
+        # «тесты не проходят».
+        if not workdir:
+            return None, []
+        obs = cli_collector.run(step.action, workdir, exec_)
         payload = (f"$ {step.action.command}\n"
                    f"код возврата: {obs.exit_code}\n\n{obs.text}").encode("utf-8")
         return obs, [publish.write_evidence(root, step.n, "command.txt", payload)]
     return None, []
 
 
-def _walk(steps: list[Step], base_url: str, root: str, send, exec_,
+def _walk(steps: list[Step], base_url: str, workdir: str, root: str, send, exec_,
           container: str, run_docker) -> list:
     """Пройти шаги, приложив к каждому логи сервиса за окно этого шага."""
     results = []
     for step in steps:
         since = log_collector.stamp()
-        obs, evidence = _observe(step, base_url, root, send, exec_)
+        obs, evidence = _observe(step, base_url, workdir, root, send, exec_)
         if container and run_docker is not None and obs is not None:
             text = log_collector.window(run_docker, container, since,
                                         log_collector.stamp())
@@ -74,12 +80,17 @@ def verify(repo: str, issue: int, pr_number: int, base_url: str, root: str,
     steps = plan.build(scenario, translate, strict=a.numbered)
 
     container = ""
+    workdir = ""
+    stand_detail = ""
     try:
         if stand is not None:
             up = stand.up(repo, issue, sha, service or {})
             if up.ok:
-                base_url, container = up.url, up.container
-        results = _walk(steps, base_url, root, send, exec_, container, run_docker)
+                base_url, container, workdir = up.url, up.container, up.workdir
+            else:
+                stand_detail = up.detail
+        results = _walk(steps, base_url, workdir, root, send, exec_, container,
+                        run_docker)
     finally:
         # Стенд гасится при любом исходе: осиротевший контейнер держит порт и
         # память на хосте, где свободного меньше гигабайта.

@@ -35,7 +35,8 @@ class _Stand:
         if not self.ok:
             return model.Stand(ok=False, detail="нечем поднимать")
         return model.Stand(ok=True, url="http://stand:3000",
-                           container="poh-howtodemo-o__r-12")
+                           container="poh-howtodemo-o__r-12",
+                           workdir="/workspaces/howtodemo/o__r-12/3a1f0c2")
 
     def down(self, repo, issue):
         self.downed.append((repo, issue))
@@ -88,3 +89,39 @@ def test_stand_that_did_not_come_up_blocks_steps_but_not_the_run(tmp_path):
     assert rep.results[0].outcome == model.BLOCKED
     assert rep.verdict == model.V_PARTIAL
     assert stand.downed == [("o/r", 12)]
+
+
+CLI_PLAN = json.dumps({"steps": [
+    {"n": 1, "text": "Запустить тесты", "action": {"kind": "cli", "command": "npm test"},
+     "expect": {"exit_code": 0}, "evidence": ["command"], "source": "x"},
+]})
+
+
+def _run_cli(stand, tmp_path, exec_):
+    return run.verify(repo="o/r", issue=12, pr_number=45, base_url="",
+                      root=str(tmp_path), gh=_GH(), translate=lambda s: CLI_PLAN,
+                      send=None, exec_=exec_, run_git=lambda a, c: (0, ""),
+                      token="t", stand=stand, sha="3a1f0c2",
+                      service={"start": "node x"}, run_docker=lambda a: (0, ""))
+
+
+def test_command_does_not_run_without_a_working_copy(tmp_path):
+    """Без стенда нет и рабочей копии — команда не запускается, а не падает."""
+    def must_not_run(command, cwd):
+        raise AssertionError("команда не должна запускаться без рабочей копии")
+
+    rep = _run_cli(_Stand(ok=False), tmp_path, must_not_run)
+    assert rep.results[0].outcome == model.BLOCKED
+    assert "не запускался" in rep.results[0].detail
+
+
+def test_command_runs_in_the_working_copy(tmp_path):
+    seen = {}
+
+    def exec_(command, cwd):
+        seen.update(command=command, cwd=cwd)
+        return 0, "ok"
+
+    rep = _run_cli(_Stand(), tmp_path, exec_)
+    assert seen["cwd"] == "/workspaces/howtodemo/o__r-12/3a1f0c2"
+    assert rep.results[0].outcome == model.PASSED

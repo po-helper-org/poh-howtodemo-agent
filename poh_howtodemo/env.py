@@ -92,7 +92,8 @@ class EphemeralStand:
         if not ready:
             self.down(repo, issue)
             return Stand(ok=False, container=name, detail=detail)
-        return Stand(ok=True, url=url, container=name, detail=detail)
+        return Stand(ok=True, url=url, container=name, workdir=target,
+                     detail=detail)
 
     def _wait_ready(self, url: str, service: dict, name: str) -> tuple[bool, str]:
         health = service.get("health_path", "/")

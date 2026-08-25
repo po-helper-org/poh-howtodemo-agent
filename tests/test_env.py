@@ -100,3 +100,15 @@ def test_token_is_only_in_the_remote_url():
     _stand(docker, [200]).up("o/r", 12, "abc123", SERVICE)
     carrying = [c for c in docker.flat() if "ghs_x" in c]
     assert len(carrying) == 1 and "remote add" in carrying[0]
+
+
+def test_stand_reports_the_working_copy():
+    docker = _Docker()
+    got = _stand(docker, [200]).up("o/r", 12, "abc123", SERVICE)
+    assert got.workdir.endswith("/howtodemo/o__r-12/abc123")
+
+
+def test_failed_stand_has_no_working_copy():
+    docker = _Docker()
+    got = _stand(docker, []).up("o/r", 12, "abc123", {"port": 3000})
+    assert got.workdir == ""
