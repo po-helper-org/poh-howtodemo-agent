@@ -21,6 +21,10 @@ _WORD = {V_PASSED: "сценарий пройден", V_FAILED: "сценари�
 
 def _line(res: StepResult) -> str:
     head = f"{_ICON.get(res.outcome, '·')} {res.n}. {res.text}"
+    if res.on_step:
+        # Утверждение проверено по чужому ответу — читатель должен видеть, по
+        # чьему именно, иначе улика под шагом выглядит подложенной.
+        head += f"\n      проверено по ответу шага {res.on_step}"
     if res.detail:
         head += f"\n      {res.detail}"
     if res.source:

@@ -71,3 +71,15 @@ def test_report_explains_why_there_was_no_environment():
 
 def test_report_says_nothing_about_environment_when_it_came_up():
     assert "Окружение поднять не удалось" not in render.report_md(_report())
+
+
+def test_assertion_says_which_step_it_was_checked_against():
+    rep = _report()
+    rep.results[0].on_step = 1
+    rep.results[0].n = 2
+    body = render.report_md(rep)
+    assert "по ответу шага 1" in body
+
+
+def test_plain_step_says_nothing_about_another_step():
+    assert "по ответу шага" not in render.report_md(_report())

@@ -14,9 +14,10 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Callable
 
-from poh_howtodemo.model import BROWSER, CLI, HTTP, UNMAPPED, Action, Expect, Step
+from poh_howtodemo.model import (ASSERT, BROWSER, CLI, HTTP, UNMAPPED, Action,
+                                 Expect, Step)
 
-KINDS = {HTTP, CLI, BROWSER, UNMAPPED}
+KINDS = {HTTP, CLI, BROWSER, ASSERT, UNMAPPED}
 
 PROMPT = Path(__file__).parent / "prompts" / "system_plan.md"
 
@@ -39,6 +40,8 @@ def _action(raw: dict) -> Action:
     kind = raw.get("kind", UNMAPPED)
     if kind not in KINDS:
         raise PlanError(f"неизвестный вид действия: {kind}")
+    # `on` из ответа модели НЕ берём: номер шага уезжает в отчёт, а всё, что
+    # туда уезжает, считает код. Привязку делает run._walk.
     return Action(kind=kind, method=raw.get("method", "GET"), path=raw.get("path", "/"),
                   body=raw.get("body"), command=raw.get("command", ""))
 
